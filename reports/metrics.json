@@ -1,0 +1,40 @@
+{
+  "run": {
+    "seed": 42,
+    "simulated_customers": 4000,
+    "synthetic_transactions": 68781
+  },
+  "dataset": {
+    "total_customers": 4000.0,
+    "eligible_customers": 3623.0,
+    "eligible_customer_share": 0.90575,
+    "modeling_snapshots": 33486.0,
+    "positive_rate": 0.41381472854327184
+  },
+  "model": {
+    "selected_model": "Logistic regression",
+    "split": {
+      "train_rows": 11941,
+      "calibration_rows": 9485,
+      "test_rows": 12060,
+      "train_end": "2025-02-12",
+      "calibration_end": "2025-10-08",
+      "test_end": "2026-06-17"
+    },
+    "test": {
+      "pr_auc": 0.6020036783370584,
+      "roc_auc": 0.6853067995723968,
+      "brier_score": 0.21665008060181937,
+      "top_10_percent": {
+        "precision": 0.7230514096185738,
+        "recall": 0.17651821862348177,
+        "lift": 1.7651821862348178
+      },
+      "top_20_percent": {
+        "precision": 0.6554726368159204,
+        "recall": 0.32004048582995953,
+        "lift": 1.6002024291497974
+      }
+    }
+  }
+}

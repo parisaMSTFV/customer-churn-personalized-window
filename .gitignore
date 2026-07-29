@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+.DS_Store
+
+# Reproducible generated data and fitted models
+data/generated/
+models/
+
+# Local coverage and build output
+.coverage
+htmlcov/
+dist/
+build/
