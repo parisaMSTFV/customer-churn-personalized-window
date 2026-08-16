@@ -11,19 +11,24 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: "pip"
       - name: Install project
         run: python -m pip install -e ".[dev]"
       - name: Lint
-        run: python -m ruff check .
+        run: python -m ruff check . && python -m ruff format --check .
       - name: Test
         run: python -m pytest
       - name: Scan public files
         run: python scripts/check_sensitive.py
       - name: Smoke-test pipeline
-        run: python -m customer_churn.cli run --customers 700 --seed 7
+        run: python -m customer_churn.cli run --project-root /tmp/churn-source --customers 700 --seed 7
+      - name: Supplied-transaction smoke test
+        run: python -m customer_churn.cli run --project-root /tmp/churn-input --input-transactions /tmp/churn-source/data/generated/transactions.csv.gz

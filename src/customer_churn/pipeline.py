@@ -16,6 +16,7 @@ from customer_churn.evaluation import (
     plot_personalized_windows,
     plot_priority_comparison,
 )
+from customer_churn.input_data import load_transactions
 from customer_churn.modeling import train_and_evaluate
 from customer_churn.prioritization import (
     build_priority_table,
@@ -31,18 +32,28 @@ def _write_summary(
 ) -> None:
     test = metrics["model"]["test"]
     coverage = metrics["dataset"]
-    top_20 = priority_comparison.loc[priority_comparison["capacity"] == 0.20].set_index(
-        "strategy"
-    )
+    top_20 = priority_comparison.loc[priority_comparison["capacity"] == 0.20].set_index("strategy")
+    run = metrics["run"]
+    if run["data_mode"] == "synthetic_evaluation":
+        source_line = (
+            f"This report was generated from synthetic transactions with seed `{run['seed']}`."
+        )
+        customer_label = "simulated customers"
+    else:
+        source_line = (
+            "This report was generated from validated supplied transactions. "
+            f"Input SHA-256: `{run['input_provenance']['sha256']}`."
+        )
+        customer_label = "customers in the supplied history"
     content = f"""# Reproducible run summary
 
-This report was generated from synthetic transactions with seed `{metrics["run"]["seed"]}`.
+{source_line}
 
 ## Dataset
 
 - {int(coverage["modeling_snapshots"]):,} eligible customer snapshots
 - {coverage["positive_rate"]:.1%} missed their personalized purchase window
-- {coverage["eligible_customer_share"]:.1%} of simulated customers had enough history
+- {coverage["eligible_customer_share"]:.1%} of {customer_label} had enough history
   for a personalized cadence
 
 ## Time-holdout performance
@@ -61,8 +72,9 @@ At 20% campaign capacity, ranking by churn probability alone captures
 Ranking by probability × expected margin captures
 {top_20.loc["Value at risk", "captured_value_share"]:.1%}.
 
-These figures describe ranking performance on synthetic data. They do not estimate
-incremental campaign impact; that requires a randomized experiment or uplift model.
+These figures describe time-holdout predictive ranking for this input. They do not estimate
+incremental campaign impact; that requires a randomized experiment or uplift model. Customer
+identifiers remain in derived artifacts and require appropriate governance.
 """
     path.write_text(content, encoding="utf-8")
 
@@ -71,6 +83,7 @@ def run_pipeline(
     project_root: Path,
     n_customers: int = 4_000,
     seed: int = 42,
+    input_transactions: Path | None = None,
 ) -> dict[str, object]:
     """Run data generation, feature engineering, modeling, and reporting."""
 
@@ -82,16 +95,29 @@ def run_pipeline(
     for directory in [data_dir, reports_dir, figures_dir, models_dir]:
         directory.mkdir(parents=True, exist_ok=True)
 
-    simulation_config = SimulationConfig(n_customers=n_customers, seed=seed)
     dataset_config = DatasetConfig()
-    customers, transactions = simulate_transactions(simulation_config)
-    customers.to_csv(data_dir / "customers.csv.gz", index=False, compression="gzip")
-    transactions.to_csv(data_dir / "transactions.csv.gz", index=False, compression="gzip")
+    if input_transactions is None:
+        simulation_config = SimulationConfig(n_customers=n_customers, seed=seed)
+        customers, transactions = simulate_transactions(simulation_config)
+        customers.to_csv(data_dir / "customers.csv.gz", index=False, compression="gzip")
+        transactions.to_csv(data_dir / "transactions.csv.gz", index=False, compression="gzip")
+        run_metadata: dict[str, object] = {
+            "data_mode": "synthetic_evaluation",
+            "seed": seed,
+            "simulated_customers": n_customers,
+            "transactions": int(len(transactions)),
+        }
+    else:
+        transactions, provenance = load_transactions(input_transactions)
+        run_metadata = {
+            "data_mode": "supplied_transaction_history",
+            "input_provenance": provenance,
+            "customers": int(transactions["customer_id"].nunique()),
+            "transactions": int(len(transactions)),
+        }
 
     modeling_dataset, coverage = build_modeling_dataset(transactions, dataset_config)
-    modeling_dataset.to_csv(
-        data_dir / "modeling_dataset.csv.gz", index=False, compression="gzip"
-    )
+    modeling_dataset.to_csv(data_dir / "modeling_dataset.csv.gz", index=False, compression="gzip")
     result = train_and_evaluate(modeling_dataset)
     joblib.dump(
         {
@@ -117,42 +143,31 @@ def run_pipeline(
 
     result.comparison.to_csv(reports_dir / "model_comparison.csv", index=False)
     result.calibration.to_csv(reports_dir / "calibration.csv", index=False)
-    result.feature_importance.to_csv(
-        reports_dir / "feature_importance.csv", index=False
-    )
+    result.feature_importance.to_csv(reports_dir / "feature_importance.csv", index=False)
     priority.head(100).to_csv(reports_dir / "priority_sample.csv", index=False)
-    priority_comparison.to_csv(
-        reports_dir / "priority_strategy_comparison.csv", index=False
-    )
+    priority_comparison.to_csv(reports_dir / "priority_strategy_comparison.csv", index=False)
 
     plot_model_comparison(result.comparison, figures_dir / "model_comparison.png")
-    plot_feature_importance(
-        result.feature_importance, figures_dir / "feature_importance.png"
-    )
+    plot_feature_importance(result.feature_importance, figures_dir / "feature_importance.png")
     plot_calibration(result.calibration, figures_dir / "calibration.png")
     plot_cumulative_gain(
         result.test_frame["churned_in_personal_window"],
         result.test_probabilities,
         figures_dir / "cumulative_gain.png",
     )
-    plot_personalized_windows(
-        modeling_dataset, figures_dir / "personalized_windows.png"
-    )
-    plot_priority_comparison(
-        priority_comparison, figures_dir / "priority_comparison.png"
-    )
+    plot_personalized_windows(modeling_dataset, figures_dir / "personalized_windows.png")
+    plot_priority_comparison(priority_comparison, figures_dir / "priority_comparison.png")
 
     metrics: dict[str, object] = {
-        "run": {
-            "seed": seed,
-            "simulated_customers": n_customers,
-            "synthetic_transactions": int(len(transactions)),
-        },
+        "run": run_metadata,
         "dataset": coverage,
         "model": result.metrics,
+        "evaluation_boundary": (
+            "Time-holdout prediction on synthetic transactions"
+            if input_transactions is None
+            else "Time-holdout prediction on supplied transactions; no campaign-effect claim"
+        ),
     }
-    (reports_dir / "metrics.json").write_text(
-        json.dumps(metrics, indent=2), encoding="utf-8"
-    )
+    (reports_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     _write_summary(reports_dir / "run_summary.md", metrics, priority_comparison)
     return metrics

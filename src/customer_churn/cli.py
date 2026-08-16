@@ -20,13 +20,23 @@ def _parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--customers", type=int, default=4_000)
     run.add_argument("--seed", type=int, default=42)
+    run.add_argument(
+        "--input-transactions",
+        type=Path,
+        help="Validated .csv or .csv.gz transaction history; bypasses simulation.",
+    )
     return parser
 
 
 def main() -> None:
     args = _parser().parse_args()
     if args.command == "run":
-        metrics = run_pipeline(args.project_root, args.customers, args.seed)
+        metrics = run_pipeline(
+            args.project_root,
+            args.customers,
+            args.seed,
+            input_transactions=args.input_transactions,
+        )
         test = metrics["model"]["test"]
         print(
             "Pipeline complete | "

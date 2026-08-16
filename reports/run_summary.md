@@ -25,5 +25,6 @@ At 20% campaign capacity, ranking by churn probability alone captures
 Ranking by probability × expected margin captures
 54.3%.
 
-These figures describe ranking performance on synthetic data. They do not estimate
-incremental campaign impact; that requires a randomized experiment or uplift model.
+These figures describe time-holdout predictive ranking for this input. They do not estimate
+incremental campaign impact; that requires a randomized experiment or uplift model. Customer
+identifiers remain in derived artifacts and require appropriate governance.

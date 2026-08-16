@@ -30,11 +30,15 @@ right-censored customers as churned.
 - Operational metrics: lift and recall at the top 10% and 20%
 - Probability quality: Brier score and calibration curve
 
-## Data
+## Data and provenance
 
-All records are synthetic. The generator creates heterogeneous customer cadence, order value,
-promotion affinity, experience failures, and purchase slowdown. It does not place a churn label
-directly on a customer; the target is calculated from the simulated event sequence.
+The checked-in benchmark is synthetic. The generator creates heterogeneous customer cadence,
+order value, promotion affinity, experience failures, and purchase slowdown. It does not place
+a churn label directly on a customer; the target is calculated from the simulated event sequence.
+
+The pipeline also accepts validated transaction histories under `transaction-history-v1.0`.
+Supplied runs record a content checksum and evaluate a chronologically held-out period; they do
+not reuse the checked-in synthetic performance claim. Derived artifacts retain customer IDs.
 
 ## Limitations
 
@@ -42,6 +46,7 @@ directly on a customer; the target is calculated from the simulated event sequen
   fallback is required for newer customers.
 - A median-and-MAD cadence estimate may react slowly to abrupt life-cycle changes.
 - Repeated seasonality, stock availability, and marketing contacts are simplified.
+- A supplied-history run is population-specific and does not by itself establish transportability.
 - Good ranking performance does not prove that a retention action is incremental or profitable.
 - Before production use, fairness, stability, drift, contact policy, and experiment design must
   be reviewed with real, governed data.

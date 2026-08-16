@@ -23,10 +23,7 @@ def plot_model_comparison(comparison: pd.DataFrame, path: Path) -> None:
     frame = comparison.sort_values("pr_auc")
     best_model = comparison.loc[comparison["pr_auc"].idxmax(), "model"]
     fig, ax = plt.subplots(figsize=(8, 4.6))
-    colors = [
-        COLORS["orange"] if name == best_model else COLORS["blue"]
-        for name in frame["model"]
-    ]
+    colors = [COLORS["orange"] if name == best_model else COLORS["blue"] for name in frame["model"]]
     ax.barh(frame["model"], frame["pr_auc"], color=colors)
     ax.set_xlabel("Validation PR-AUC")
     ax.set_title("Predicting missed personalized purchase windows")
@@ -111,9 +108,7 @@ def plot_personalized_windows(dataset: pd.DataFrame, path: Path) -> None:
 
 
 def plot_priority_comparison(comparison: pd.DataFrame, path: Path) -> None:
-    pivot = comparison.pivot(
-        index="capacity", columns="strategy", values="captured_value_share"
-    )
+    pivot = comparison.pivot(index="capacity", columns="strategy", values="captured_value_share")
     fig, ax = plt.subplots(figsize=(7.0, 4.8))
     positions = np.arange(len(pivot))
     width = 0.34

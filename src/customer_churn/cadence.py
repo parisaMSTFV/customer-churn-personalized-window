@@ -34,9 +34,7 @@ def estimate_cadence(
     mad = float(np.median(np.abs(recent - expected_gap)))
     robust_dispersion = 1.4826 * mad
     raw_window = expected_gap + config.dispersion_buffer * robust_dispersion
-    window = int(
-        np.clip(np.ceil(raw_window), config.min_window_days, config.max_window_days)
-    )
+    window = int(np.clip(np.ceil(raw_window), config.min_window_days, config.max_window_days))
 
     if len(gaps) >= 5:
         recent_median = float(np.median(gaps.tail(3)))
