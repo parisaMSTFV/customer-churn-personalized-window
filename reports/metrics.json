@@ -1,8 +1,9 @@
 {
   "run": {
+    "data_mode": "synthetic_evaluation",
     "seed": 42,
     "simulated_customers": 4000,
-    "synthetic_transactions": 68781
+    "transactions": 68781
   },
   "dataset": {
     "total_customers": 4000.0,
@@ -36,5 +37,6 @@
         "lift": 1.6002024291497974
       }
     }
-  }
+  },
+  "evaluation_boundary": "Time-holdout prediction on synthetic transactions"
 }

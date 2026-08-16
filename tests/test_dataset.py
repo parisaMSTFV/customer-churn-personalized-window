@@ -36,9 +36,7 @@ def test_future_order_does_not_change_snapshot_features() -> None:
     history_dates = events.loc[:4, "order_date"]
     cadence = estimate_cadence(history_dates, config)
     score_date = pd.Timestamp("2025-07-01")
-    with_future = customer_features(
-        events, score_date, pd.Timestamp("2025-06-10"), cadence, 180
-    )
+    with_future = customer_features(events, score_date, pd.Timestamp("2025-06-10"), cadence, 180)
     without_future = customer_features(
         events.iloc[:5], score_date, pd.Timestamp("2025-06-10"), cadence, 180
     )

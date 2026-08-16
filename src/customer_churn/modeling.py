@@ -156,9 +156,7 @@ def train_and_evaluate(dataset: pd.DataFrame) -> TrainingResult:
     comparison = pd.DataFrame(comparison_rows).sort_values("pr_auc", ascending=False)
     selected_name = max(
         fitted,
-        key=lambda name: average_precision_score(
-            y_calibration, validation_probabilities[name]
-        ),
+        key=lambda name: average_precision_score(y_calibration, validation_probabilities[name]),
     )
     selected_model = fitted[selected_name]
     calibrator = LogisticRegression(random_state=42)
@@ -210,9 +208,7 @@ def train_and_evaluate(dataset: pd.DataFrame) -> TrainingResult:
             "calibration_rows": int(len(calibration_frame)),
             "test_rows": int(len(test)),
             "train_end": str(pd.to_datetime(train["score_date"]).max().date()),
-            "calibration_end": str(
-                pd.to_datetime(calibration_frame["score_date"]).max().date()
-            ),
+            "calibration_end": str(pd.to_datetime(calibration_frame["score_date"]).max().date()),
             "test_end": str(pd.to_datetime(test["score_date"]).max().date()),
         },
         "test": test_metrics,

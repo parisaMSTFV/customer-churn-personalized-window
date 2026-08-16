@@ -24,12 +24,8 @@ def build_priority_table(
     priority["value_at_risk"] = (
         priority["churn_probability"] * priority["estimated_margin_next_180d"]
     )
-    priority["risk_rank"] = priority["churn_probability"].rank(
-        method="first", ascending=False
-    )
-    priority["value_at_risk_rank"] = priority["value_at_risk"].rank(
-        method="first", ascending=False
-    )
+    priority["risk_rank"] = priority["churn_probability"].rank(method="first", ascending=False)
+    priority["value_at_risk_rank"] = priority["value_at_risk"].rank(method="first", ascending=False)
     return priority.sort_values("value_at_risk", ascending=False).reset_index(drop=True)
 
 

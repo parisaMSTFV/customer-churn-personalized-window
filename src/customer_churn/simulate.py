@@ -98,9 +98,7 @@ def simulate_transactions(
             delivery_delay_days = (
                 int(rng.integers(3, 11)) if is_delayed else int(rng.integers(0, 3))
             )
-            is_bad_experience = float(
-                is_cancelled or is_returned or delivery_delay_days >= 3
-            )
+            is_bad_experience = float(is_cancelled or is_returned or delivery_delay_days >= 3)
 
             margin_rate = 0.24 - 0.32 * discount_pct + float(rng.normal(0, 0.025))
             contribution_margin = 0.0 if is_cancelled else gross_value * margin_rate
@@ -133,9 +131,7 @@ def simulate_transactions(
                 if rng.random() < _sigmoid(attrition_logit):
                     break
 
-            drift_multiplier = float(
-                np.clip(1.0 + customer.cadence_drift * event_index, 0.65, 2.2)
-            )
+            drift_multiplier = float(np.clip(1.0 + customer.cadence_drift * event_index, 0.65, 2.2))
             experience_multiplier = 1.0 + 0.55 * is_bad_experience + 0.25 * recent_bad_experience
             random_multiplier = float(rng.lognormal(0, 0.27))
             next_gap = customer.base_gap_days * drift_multiplier * experience_multiplier

@@ -10,9 +10,7 @@ PATTERNS = {
     "private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     "GitHub token": re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}\b"),
     "AWS access key": re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
-    "connection string password": re.compile(
-        r"(?i)(?:password|pwd)\s*=\s*[^;\s\"']{6,}"
-    ),
+    "connection string password": re.compile(r"(?i)(?:password|pwd)\s*=\s*[^;\s\"']{6,}"),
     "internal host": re.compile(r"(?i)\b(?:prod|staging)[-_][a-z0-9.-]+\.(?:local|corp)\b"),
 }
 

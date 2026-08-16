@@ -46,9 +46,7 @@ def customer_features(
     recent = visible.loc[
         visible["order_date"] >= score_date - pd.to_timedelta(lookback_days, unit="D")
     ]
-    annual = visible.loc[
-        visible["order_date"] >= score_date - pd.to_timedelta(365, unit="D")
-    ]
+    annual = visible.loc[visible["order_date"] >= score_date - pd.to_timedelta(365, unit="D")]
     recent_success = recent.loc[recent["is_cancelled"] == 0]
     annual_success = annual.loc[annual["is_cancelled"] == 0]
     failed = (
@@ -103,16 +101,10 @@ def _array_features(
     score_value = np.datetime64(score_date, "ns")
     visible_end = int(np.searchsorted(event_dates, score_value, side="right"))
     visible_dates = event_dates[:visible_end]
-    recent_start_value = np.datetime64(
-        score_date - pd.Timedelta(days=lookback_days), "ns"
-    )
+    recent_start_value = np.datetime64(score_date - pd.Timedelta(days=lookback_days), "ns")
     annual_start_value = np.datetime64(score_date - pd.Timedelta(days=365), "ns")
-    recent_start = int(
-        np.searchsorted(visible_dates, recent_start_value, side="left")
-    )
-    annual_start = int(
-        np.searchsorted(visible_dates, annual_start_value, side="left")
-    )
+    recent_start = int(np.searchsorted(visible_dates, recent_start_value, side="left"))
+    annual_start = int(np.searchsorted(visible_dates, annual_start_value, side="left"))
 
     recent_slice = slice(recent_start, visible_end)
     annual_slice = slice(annual_start, visible_end)
@@ -141,16 +133,10 @@ def _array_features(
         "window_progress": current_gap / max(cadence.personalized_window_days, 1),
         "successful_orders_180d": float(recent_success.sum()),
         "successful_orders_365d": float(annual_success.sum()),
-        "average_order_value_180d": float(recent_values.mean())
-        if len(recent_values)
-        else 0.0,
+        "average_order_value_180d": float(recent_values.mean()) if len(recent_values) else 0.0,
         "margin_180d": float(recent_margins.sum()),
-        "average_discount_180d": float(recent_discounts.mean())
-        if len(recent_discounts)
-        else 0.0,
-        "failure_rate_180d": float(recent_failures.mean())
-        if len(recent_failures)
-        else 0.0,
+        "average_discount_180d": float(recent_discounts.mean()) if len(recent_discounts) else 0.0,
+        "failure_rate_180d": float(recent_failures.mean()) if len(recent_failures) else 0.0,
         "category_diversity_180d": float(np.unique(recent_categories).size),
         "customer_tenure_days": float((score_date - first_visible_date).days),
     }
@@ -228,9 +214,8 @@ def build_modeling_dataset(
                 cadence=cadence,
                 lookback_days=config.feature_lookback_days,
             )
-            average_margin = (
-                feature_values["margin_180d"]
-                / max(feature_values["successful_orders_180d"], 1.0)
+            average_margin = feature_values["margin_180d"] / max(
+                feature_values["successful_orders_180d"], 1.0
             )
             estimated_margin_next_180d = max(0.0, average_margin) * (
                 180.0 / max(cadence.expected_gap_days, 1.0)
@@ -241,9 +226,7 @@ def build_modeling_dataset(
                     "score_date": score_date,
                     "anchor_order_date": anchor_date,
                     "personalized_deadline": deadline,
-                    "churned_in_personal_window": int(
-                        pd.isna(next_date) or next_date > deadline
-                    ),
+                    "churned_in_personal_window": int(pd.isna(next_date) or next_date > deadline),
                     "estimated_margin_next_180d": estimated_margin_next_180d,
                     **feature_values,
                 }
