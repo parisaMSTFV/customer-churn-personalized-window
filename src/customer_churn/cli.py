@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from customer_churn.pipeline import run_pipeline
+from customer_churn.pipeline import run_pipeline, score_pipeline
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -25,6 +25,15 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         help="Validated .csv or .csv.gz transaction history; bypasses simulation.",
     )
+    run.add_argument(
+        "--observation-end",
+        help="Explicit YYYY-MM-DD data cutoff; required for supplied transaction history.",
+    )
+    score = subparsers.add_parser("score", help="Create label-free operational scores.")
+    score.add_argument("--input-transactions", type=Path, required=True)
+    score.add_argument("--observation-end", required=True)
+    score.add_argument("--model-bundle", type=Path, required=True)
+    score.add_argument("--output-root", type=Path, required=True)
     return parser
 
 
@@ -36,12 +45,25 @@ def main() -> None:
             args.customers,
             args.seed,
             input_transactions=args.input_transactions,
+            observation_end=args.observation_end,
         )
         test = metrics["model"]["test"]
         print(
             "Pipeline complete | "
             f"PR-AUC={test['pr_auc']:.3f} | "
             f"Top-20% lift={test['top_20_percent']['lift']:.2f}x"
+        )
+    elif args.command == "score":
+        metrics = score_pipeline(
+            input_transactions=args.input_transactions,
+            observation_end=args.observation_end,
+            model_bundle=args.model_bundle,
+            output_root=args.output_root,
+        )
+        print(
+            "Scoring complete | "
+            f"customers={int(metrics['coverage']['actionable_customers'])} | "
+            f"drift={metrics['feature_drift']['status']}"
         )
 
 

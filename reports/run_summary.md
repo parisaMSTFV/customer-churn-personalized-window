@@ -1,30 +1,35 @@
 # Reproducible run summary
 
-This report was generated from synthetic transactions with seed `42`.
+Synthetic transactions, seed `42`.
 
 ## Dataset
 
-- 33,486 eligible customer snapshots
-- 41.4% missed their personalized purchase window
-- 90.6% of simulated customers had enough history
-  for a personalized cadence
+- 32,195 eligible historical snapshots
+- 41.7% missed their personalized purchase window
+- 89.8% of simulated customers had enough retained purchases
+- 1,079 label-free operational scores
 
-## Time-holdout performance
+## Independent time-holdout performance
 
-- Selected model: Logistic regression
-- PR-AUC: 0.602
-- ROC-AUC: 0.685
-- Brier score: 0.217
-- Recall in the top 20%: 32.0%
-- Lift in the top 20%: 1.60x
+- Selected candidate: Logistic regression
+- PR-AUC: 0.602 (customer-cluster bootstrap 95% CI 0.585–0.618)
+- ROC-AUC: 0.678
+- Brier score: 0.218
+- Log loss: 0.627
+- Expected calibration error: 0.014
+- Recall in the top 20%: 31.9%
+- Lift in the top 20%: 1.59x
 
-## Capacity-limited prioritization
+## Historical prioritization check
 
-At 20% campaign capacity, ranking by churn probability alone captures
-35.6% of modeled value at risk.
-Ranking by probability × expected margin captures
-54.3%.
+At 20% capacity, risk-only ranking captures 34.7%
+of the held-out margin proxy. Probability × expected margin captures
+54.1%. The corresponding missed-window
+recalls are 29.8% and
+25.0%.
 
-These figures describe time-holdout predictive ranking for this input. They do not estimate
-incremental campaign impact; that requires a randomized experiment or uplift model. Customer
-identifiers remain in derived artifacts and require appropriate governance.
+The operational score file is label-free and uses HMAC customer keys. These figures measure
+historical ranking, not incremental campaign impact. A randomized experiment or uplift model
+is required before making a causal retention claim.
+
+Run fingerprint: `cc395adfc4443c47`

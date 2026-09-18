@@ -46,3 +46,18 @@ def test_future_order_does_not_change_snapshot_features() -> None:
 def test_model_features_exclude_target_and_future_dates() -> None:
     forbidden = {"churned_in_personal_window", "personalized_deadline", "next_order_date"}
     assert forbidden.isdisjoint(MODEL_FEATURES)
+
+
+def test_returned_order_is_not_counted_as_successful() -> None:
+    events = _events().iloc[:5].copy()
+    events.loc[4, "is_returned"] = 1
+    cadence = estimate_cadence(events.loc[:3, "order_date"], DatasetConfig())
+    features = customer_features(
+        events,
+        pd.Timestamp("2025-07-01"),
+        pd.Timestamp("2025-05-01"),
+        cadence,
+        180,
+    )
+    assert features["successful_orders_180d"] == 3
+    assert features["failure_rate_180d"] > 0
