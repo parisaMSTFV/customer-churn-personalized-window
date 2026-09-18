@@ -16,6 +16,7 @@ def test_value_at_risk_can_change_retention_priority() -> None:
             "personalized_window_days": [20, 20],
             "estimated_margin_next_180d": [10.0, 100.0],
             "churned_in_personal_window": [1, 0],
+            "heldout_margin_proxy": [25.0, 100.0],
         }
     )
     priority = build_priority_table(scored, np.array([0.90, 0.50]))

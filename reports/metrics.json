@@ -1,42 +1,75 @@
 {
+  "current_scoring": {
+    "actionable_customer_share": 0.26975,
+    "actionable_customers": 1079.0,
+    "cadence_eligible_customers": 3590.0,
+    "total_customers": 4000.0
+  },
+  "dataset": {
+    "eligible_customer_share": 0.8975,
+    "eligible_customers": 3590.0,
+    "modeling_snapshots": 32195.0,
+    "positive_rate": 0.41736294455660816,
+    "total_customers": 4000.0
+  },
+  "evaluation_boundary": "Independent historical test ranking; operational scores contain no future label",
+  "feature_drift": {
+    "purpose": "diagnostic_only",
+    "status": "ok",
+    "threshold_robust_units": 2.0,
+    "warning_features": []
+  },
+  "model": {
+    "selected_model": "Logistic regression",
+    "selection_metric": "validation_pr_auc",
+    "split": {
+      "calibration_end": "2025-12-03",
+      "calibration_rows": 7670,
+      "test_end": "2026-06-17",
+      "test_rows": 9048,
+      "train_end": "2024-10-09",
+      "train_rows": 7736,
+      "validation_end": "2025-06-04",
+      "validation_rows": 7741
+    },
+    "test": {
+      "brier_score": 0.21839847203809193,
+      "calibration_intercept": -0.03479804161075693,
+      "calibration_slope": 0.9937181979222481,
+      "cluster_bootstrap_95": {
+        "brier_score": {
+          "lower_95": 0.2146606671638651,
+          "upper_95": 0.22234134439220826
+        },
+        "cluster": "customer",
+        "iterations": 200,
+        "pr_auc": {
+          "lower_95": 0.5848286087790624,
+          "upper_95": 0.6177035711332952
+        }
+      },
+      "expected_calibration_error": 0.013691071929192283,
+      "log_loss": 0.6267469563390874,
+      "pr_auc": 0.6019333629483545,
+      "roc_auc": 0.6779740096689907,
+      "top_10_percent": {
+        "lift": 1.7755344509724174,
+        "precision": 0.7303867403314918,
+        "recall": 0.17759269210102097
+      },
+      "top_20_percent": {
+        "lift": 1.59287735162881,
+        "precision": 0.6552486187845303,
+        "recall": 0.3186458893068243
+      }
+    }
+  },
   "run": {
     "data_mode": "synthetic_evaluation",
+    "observation_end": "2026-06-30",
     "seed": 42,
     "simulated_customers": 4000,
     "transactions": 68781
   },
-  "dataset": {
-    "total_customers": 4000.0,
-    "eligible_customers": 3623.0,
-    "eligible_customer_share": 0.90575,
-    "modeling_snapshots": 33486.0,
-    "positive_rate": 0.41381472854327184
-  },
-  "model": {
-    "selected_model": "Logistic regression",
-    "split": {
-      "train_rows": 11941,
-      "calibration_rows": 9485,
-      "test_rows": 12060,
-      "train_end": "2025-02-12",
-      "calibration_end": "2025-10-08",
-      "test_end": "2026-06-17"
-    },
-    "test": {
-      "pr_auc": 0.6020036783370584,
-      "roc_auc": 0.6853067995723968,
-      "brier_score": 0.21665008060181937,
-      "top_10_percent": {
-        "precision": 0.7230514096185738,
-        "recall": 0.17651821862348177,
-        "lift": 1.7651821862348178
-      },
-      "top_20_percent": {
-        "precision": 0.6554726368159204,
-        "recall": 0.32004048582995953,
-        "lift": 1.6002024291497974
-      }
-    }
-  },
-  "evaluation_boundary": "Time-holdout prediction on synthetic transactions"
+  "run_fingerprint": "cc395adfc4443c47"
 }

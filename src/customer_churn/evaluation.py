@@ -127,8 +127,8 @@ def plot_priority_comparison(comparison: pd.DataFrame, path: Path) -> None:
         color=COLORS["orange"],
     )
     ax.set_xticks(positions, [f"{fraction:.0%}" for fraction in pivot.index])
-    ax.set(xlabel="Campaign capacity", ylabel="Share of modeled value at risk captured")
-    ax.set_title("Retention prioritization under limited capacity")
+    ax.set(xlabel="Campaign capacity", ylabel="Share of held-out margin proxy captured")
+    ax.set_title("Historical prioritization against an outcome proxy")
     ax.legend(frameon=False)
     ax.spines[["top", "right"]].set_visible(False)
     _save(fig, path)

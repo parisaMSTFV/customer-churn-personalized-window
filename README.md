@@ -2,169 +2,179 @@
 
 [![CI](https://github.com/parisaMSTFV/customer-churn-personalized-window/actions/workflows/ci.yml/badge.svg)](https://github.com/parisaMSTFV/customer-churn-personalized-window/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3C78A8)
-![Input](https://img.shields.io/badge/input-transaction%20history-4A9D8F)
+![Input](https://img.shields.io/badge/input_contract-v2.0-4A9D8F)
 
 Customer churn is not the same calendar interval for everyone. A customer who normally buys
-every 40 days should not be evaluated with the same fixed 90-day rule as a weekly customer.
-This project predicts whether each customer will miss the next purchase deadline implied by
-their own historical cadence.
+every 40 days should not be evaluated with the same fixed 90-day rule as a weekly customer. This
+project predicts whether each customer will miss the next deadline implied by their own retained
+purchase cadence, then creates a separate label-free operational score.
 
-| Checked-in synthetic time holdout | Result |
+| Checked-in synthetic test period | Result |
 |---|---:|
 | PR-AUC | 0.602 |
-| Brier score | 0.217 |
-| Recall at top 20% | 32.0% |
-| Lift at top 20% | 1.60x |
+| Customer-cluster bootstrap 95% CI | 0.585–0.618 |
+| ROC-AUC | 0.678 |
+| Brier score | 0.218 |
+| Recall at top 20% | 31.9% |
+| Lift at top 20% | 1.59x |
 
 ![Time-holdout model comparison](reports/figures/model_comparison.png)
 
+## Two distinct workflows
+
+Train and evaluate on a complete, explicitly bounded history:
+
 ```bash
-churn-pipeline run --input-transactions path/to/transactions.csv.gz --project-root artifacts/churn-run
+export CHURN_ID_SALT="deployment-owned-secret-at-least-16-characters"
+churn-pipeline run \
+  --input-transactions path/to/transactions.csv.gz \
+  --observation-end 2026-06-30 \
+  --project-root artifacts/churn-run
 ```
 
-The committed metrics come from synthetic transactions and verify the workflow only. Supplied histories receive their own time-holdout evaluation and checksum provenance; neither mode estimates incremental retention impact.
+Apply the fitted bundle to a current history without constructing a future label:
+
+```bash
+churn-pipeline score \
+  --input-transactions path/to/current-transactions.csv.gz \
+  --observation-end 2026-07-31 \
+  --model-bundle artifacts/churn-run/models/personalized_churn_model.joblib \
+  --output-root artifacts/churn-score
+```
+
+`operational_scores.csv` contains pseudonymous `customer_key` values, probabilities, and ranking
+fields. It contains no raw customer ID and no churn truth. See the strict
+[transaction contract](docs/INPUT_SCHEMA.md).
 
 ## Business question
 
 Among customers approaching the end of their expected purchase cycle:
 
 1. Who is likely to miss their personalized purchase window?
-2. With limited retention capacity, should customers be ranked by churn risk alone or by
-   probability-weighted value at risk?
-
-## Decision flow
+2. With limited retention capacity, should customers be ranked by risk alone or by
+   probability-weighted expected margin?
 
 ```mermaid
 flowchart TD
-    A["Past successful purchases"] --> B["Estimate personal cadence"]
-    B --> C["Set alert date and deadline"]
-    C --> D["Build point-in-time features"]
-    D --> E["Predict missed window"]
-    E --> F["Rank risk × expected margin"]
+    A["Retained purchases"] --> B["Personal cadence"]
+    B --> C["Alert date and deadline"]
+    C --> D["Historical evaluation"]
+    C --> E["Current label-free scoring"]
+    E --> F["Risk × expected margin"]
 ```
 
-For a stable 40-day buyer, the expected gap and deadline are approximately 40 days. A more
-irregular buyer receives an uncertainty buffer based on the median absolute deviation of recent
-purchase gaps. Scoring happens before the deadline, so there is still time to act.
+A retained purchase is neither cancelled nor returned. Returned orders remain failure signals,
+but cannot anchor cadence or close a purchase window. The observation boundary is supplied by the
+caller; it is never inferred from the final row in a file.
 
 ![Personalized windows](reports/figures/personalized_windows.png)
 
-## Use your transaction history
+## Leakage-resistant evaluation
 
-The `transaction-history-v1.0` input path validates identifiers, dates, numeric values, business flags, category IDs, minimum history, and file integrity before any feature is built. The source filename, SHA-256, row/customer counts, and date range are written into `reports/metrics.json`.
+Every historical row is a point-in-time snapshot. Features use only events visible at that date,
+and deadlines extending past the observation cutoff are removed. Four chronological periods have
+separate jobs:
 
-```bash
-python -m pip install -e ".[dev]"
-churn-pipeline run \
-  --input-transactions path/to/transactions.csv \
-  --project-root artifacts/churn-run
-```
+| Period | Purpose |
+|---|---|
+| Train | Fit candidate models |
+| Validation | Select the candidate by PR-AUC |
+| Calibration | Fit probability calibration after refitting on train + validation |
+| Test | Report final performance once |
 
-The source file is not copied. Derived datasets and priority samples retain `customer_id`, so the output directory must be governed. See the complete [transaction contract](docs/INPUT_SCHEMA.md).
-
-## What makes the target actionable
-
-Each row is a historical scoring snapshot:
-
-- Cadence uses only successful orders available up to the last purchase.
-- A customer becomes eligible after reaching 55% of their expected gap.
-- The first biweekly scoring run after that alert point creates one snapshot for the purchase spell.
-- The target is one when the next successful purchase falls after the personalized deadline or
-  does not occur.
-- Deadlines beyond the observation period are excluded to prevent right-censoring errors.
-
-This setup prevents future orders from entering model features and keeps train, calibration,
-and test periods in chronological order.
-
-## Modeling
-
-The pipeline compares:
-
-- a fixed 90-day recency rule;
-- a rule based on progress through the personalized window;
-- logistic regression;
-- histogram gradient boosting.
-
-The primary metric is PR-AUC. ROC-AUC, Brier score, calibration, lift, and recall at the top
-10% and 20% are also reported.
+Fixed 90-day and personalized-window rules are deployable candidates alongside logistic
+regression and histogram gradient boosting. Reported metrics include PR-AUC, ROC-AUC, Brier score,
+log loss, expected calibration error, calibration slope/intercept, and top-10%/top-20% ranking.
+Uncertainty comes from 200 customer-cluster bootstrap replicates.
 
 ![Cumulative gain](reports/figures/cumulative_gain.png)
 
 ![Calibration](reports/figures/calibration.png)
 
-### Latest reproducible run
+## Latest reproducible run
 
-The committed report was produced from 4,000 simulated customers and seed `42`.
+The committed benchmark uses 4,000 simulated customers, 68,781 transactions, and seed `42`.
 
-| Time-holdout measure | Result |
+| Measure | Result |
 |---|---:|
-| Eligible snapshots | 33,486 |
-| Customers with enough history | 90.6% |
+| Historical modeling snapshots | 32,195 |
+| Customers eligible for personal cadence | 89.75% |
+| Missed-window rate | 41.74% |
+| Current actionable customers | 1,079 |
+| Selected candidate | Logistic regression |
 | PR-AUC | 0.602 |
-| ROC-AUC | 0.685 |
-| Brier score | 0.217 |
-| Recall in the top 20% | 32.0% |
-| Lift in the top 20% | 1.60x |
+| Brier score | 0.218 |
+| Expected calibration error | 0.014 |
+| Feature-drift diagnostic | OK |
 
-These are synthetic-data results used to verify the pipeline, not expected production
-performance.
+These numbers verify the workflow on synthetic data. They are not production-performance or
+incremental-retention claims.
 
 ![Feature importance](reports/figures/feature_importance.png)
 
-## Retention prioritization
-
-The project separates prediction from action. It compares:
+## Capacity-limited prioritization
 
 ```text
 Risk-only score = P(miss personalized window)
 Value-at-risk score = P(miss personalized window) × expected margin over 180 days
 ```
 
+Historical comparison uses the held-out proxy `missed window × expected 180-day margin`. At 20%
+capacity, risk-only ranking captures 34.7% of that proxy and 29.8% of missed windows; value-at-risk
+captures 54.1% and 25.0%, respectively. The comparison therefore exposes the trade-off between
+customer recall and value concentration. It is not an uplift or incremental-profit estimate.
+
 ![Priority comparison](reports/figures/priority_comparison.png)
 
-This is a prioritization heuristic, not an uplift estimate. A randomized experiment or uplift
-model is required to claim that a campaign caused incremental retention.
+## Bundle, drift, and privacy controls
+
+- Bundle version `2.0` stores the model, calibrator, feature order, configuration, software
+  versions, development reference, observation date, and input fingerprint.
+- `feature_drift.csv` compares current medians and missing rates with the development reference;
+  a two-robust-scale warning is diagnostic only.
+- Contract `transaction-history-v2.0` preserves leading-zero IDs, rejects spreadsheet-formula
+  prefixes, enforces exact columns and resource limits, and omits source filenames from provenance.
+- Supplied data requires a deployment-owned `CHURN_ID_SALT`; public customer-level reports contain
+  only stable 24-character HMAC keys.
+
+## Stability check
+
+Five 700-customer runs selected logistic regression five times. Across seeds `7`, `17`, `27`,
+`37`, and `47`, PR-AUC ranged from 0.588 to 0.632, Brier score from 0.214 to 0.227, and expected
+calibration error from 0.033 to 0.050. See [stability.csv](reports/stability.csv).
+
+## Reproduce and verify
+
+Python 3.11 or 3.12 and `uv` are required.
+
+```bash
+uv sync --frozen --all-extras
+uv run churn-pipeline run --project-root . --customers 4000 --seed 42
+uv run python scripts/run_stability.py
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest
+uv run python scripts/check_sensitive.py
+make wheel-smoke
+```
+
+CI uses `uv.lock`, pinned GitHub Action SHAs, a 90% branch-coverage gate, source and supplied-input
+smokes, operational scoring, and installation of the built wheel in an isolated non-editable
+environment.
 
 ## Repository structure
 
 ```text
 .
-├── src/customer_churn/     # simulation, cadence, features, models, evaluation
-├── tests/                  # cadence, leakage, and prioritization tests
-├── scripts/                # public-file sensitive-content scan
-├── reports/                # reproducible metrics, tables, and figures
-├── docs/INPUT_SCHEMA.md    # supplied transaction contract and claim boundary
-├── docs/model_card.md      # intended use and limitations
+├── src/customer_churn/     # simulation, cadence, features, models, scoring
+├── tests/                  # 40 tests, including privacy and wheel-safe paths
+├── scripts/                # stability benchmark and sensitive-content scan
+├── reports/                # synthetic metrics, pseudonymous scores, tables, figures
+├── docs/INPUT_SCHEMA.md    # strict supplied-data contract
+├── docs/model_card.md      # intended use, evaluation, and limitations
 └── .github/workflows/ci.yml
 ```
 
-## Reproduce the project
-
-Python 3.11 or later is required.
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e ".[dev]"
-python -m customer_churn.cli run
-python -m ruff check .
-python -m ruff format --check .
-python -m pytest
-python scripts/check_sensitive.py
-```
-
-Generated transactions, feature tables, and fitted models are written to ignored directories. In supplied-input mode, the caller selects that output root. Only the compact synthetic benchmark reports are committed.
-
-See [the latest run summary](reports/run_summary.md), [full metrics](reports/metrics.json), and
-the [model card](docs/model_card.md).
-
-## Limitations
-
-- At least four successful purchases are required for an individual cadence. Newer customers
-  need a cohort-level fallback and are reported outside model coverage.
-- The synthetic generator simplifies seasonality, marketing contacts, availability, and
-  customer life events.
-- Historical value is not the same as incremental saveable value.
-- Supplied-history metrics remain observational forecasting evidence; they do not establish campaign lift or transportability.
-- Production use would require governed data, drift monitoring, fairness checks, contact
-  constraints, and controlled experimentation.
+Generated transactions, fitted models, supplied inputs, and ad hoc output roots are ignored by
+Git. See [the run summary](reports/run_summary.md), [full metrics](reports/metrics.json), and the
+[model card](docs/model_card.md).

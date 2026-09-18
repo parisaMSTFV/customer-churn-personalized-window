@@ -28,6 +28,12 @@ MODEL_FEATURES = [
 ]
 
 
+def _retained_mask(frame: pd.DataFrame) -> pd.Series:
+    """A successful purchase is neither cancelled nor returned."""
+
+    return (frame["is_cancelled"] == 0) & (frame["is_returned"] == 0)
+
+
 def customer_features(
     events: pd.DataFrame,
     score_date: pd.Timestamp,
@@ -47,8 +53,8 @@ def customer_features(
         visible["order_date"] >= score_date - pd.to_timedelta(lookback_days, unit="D")
     ]
     annual = visible.loc[visible["order_date"] >= score_date - pd.to_timedelta(365, unit="D")]
-    recent_success = recent.loc[recent["is_cancelled"] == 0]
-    annual_success = annual.loc[annual["is_cancelled"] == 0]
+    recent_success = recent.loc[_retained_mask(recent)]
+    annual_success = annual.loc[_retained_mask(annual)]
     failed = (
         (recent["is_cancelled"] == 1)
         | (recent["is_returned"] == 1)
@@ -108,8 +114,8 @@ def _array_features(
 
     recent_slice = slice(recent_start, visible_end)
     annual_slice = slice(annual_start, visible_end)
-    recent_success = is_cancelled[recent_slice] == 0
-    annual_success = is_cancelled[annual_slice] == 0
+    recent_success = (is_cancelled[recent_slice] == 0) & (is_returned[recent_slice] == 0)
+    annual_success = (is_cancelled[annual_slice] == 0) & (is_returned[annual_slice] == 0)
     recent_values = gross_value[recent_slice][recent_success]
     recent_margins = contribution_margin[recent_slice][recent_success]
     recent_discounts = discount_pct[recent_slice][recent_success]
@@ -145,6 +151,7 @@ def _array_features(
 def build_modeling_dataset(
     transactions: pd.DataFrame,
     config: DatasetConfig,
+    observation_end: str | pd.Timestamp,
 ) -> tuple[pd.DataFrame, dict[str, float]]:
     """Create one actionable snapshot per eligible interpurchase spell.
 
@@ -156,14 +163,16 @@ def build_modeling_dataset(
     transactions = transactions.copy()
     transactions["order_date"] = pd.to_datetime(transactions["order_date"])
     transactions = transactions.sort_values(["customer_id", "order_date", "order_id"])
-    observation_end = pd.Timestamp(transactions["order_date"].max()).normalize()
+    observation_end = pd.Timestamp(observation_end).normalize()
+    if pd.Timestamp(transactions["order_date"].max()).normalize() > observation_end:
+        raise ValueError("Transactions must not occur after observation_end.")
     origin = pd.Timestamp(transactions["order_date"].min()).normalize()
     rows: list[dict[str, object]] = []
     eligible_customers: set[str] = set()
 
     for customer_id, events in transactions.groupby("customer_id", sort=False):
         events = events.sort_values(["order_date", "order_id"]).reset_index(drop=True)
-        successful = events.loc[events["is_cancelled"] == 0].reset_index(drop=True)
+        successful = events.loc[_retained_mask(events)].reset_index(drop=True)
         if len(successful) < config.min_successful_orders:
             continue
         eligible_customers.add(str(customer_id))
@@ -178,7 +187,10 @@ def build_modeling_dataset(
 
         for anchor_index in range(config.min_successful_orders - 1, len(successful)):
             history = successful.iloc[: anchor_index + 1]
-            cadence = estimate_cadence(history["order_date"], config)
+            try:
+                cadence = estimate_cadence(history["order_date"], config)
+            except ValueError:
+                continue
             anchor_date = pd.Timestamp(history.iloc[-1]["order_date"]).normalize()
             alert_days = max(1, math.ceil(config.alert_fraction * cadence.expected_gap_days))
             alert_start = anchor_date + pd.Timedelta(days=alert_days)
@@ -220,14 +232,27 @@ def build_modeling_dataset(
             estimated_margin_next_180d = max(0.0, average_margin) * (
                 180.0 / max(cadence.expected_gap_days, 1.0)
             )
+            outcome_end = min(score_date + pd.Timedelta(days=180), observation_end)
+            realized_mask = (
+                (events["order_date"] > score_date)
+                & (events["order_date"] <= outcome_end)
+                & _retained_mask(events)
+            )
+            realized_margin_next_180d = max(
+                0.0, float(events.loc[realized_mask, "contribution_margin"].sum())
+            )
+            churned = int(pd.isna(next_date) or next_date > deadline)
+            heldout_margin_proxy = estimated_margin_next_180d * churned
             rows.append(
                 {
                     "customer_id": str(customer_id),
                     "score_date": score_date,
                     "anchor_order_date": anchor_date,
                     "personalized_deadline": deadline,
-                    "churned_in_personal_window": int(pd.isna(next_date) or next_date > deadline),
+                    "churned_in_personal_window": churned,
                     "estimated_margin_next_180d": estimated_margin_next_180d,
+                    "realized_margin_next_180d": realized_margin_next_180d,
+                    "heldout_margin_proxy": heldout_margin_proxy,
                     **feature_values,
                 }
             )
@@ -246,3 +271,70 @@ def build_modeling_dataset(
         "positive_rate": float(dataset["churned_in_personal_window"].mean()),
     }
     return dataset, coverage
+
+
+def build_current_scoring_dataset(
+    transactions: pd.DataFrame,
+    config: DatasetConfig,
+    observation_end: str | pd.Timestamp,
+) -> tuple[pd.DataFrame, dict[str, float]]:
+    """Create one label-free, actionable snapshot at an explicit as-of date."""
+
+    transactions = transactions.copy()
+    transactions["order_date"] = pd.to_datetime(transactions["order_date"])
+    observation_end = pd.Timestamp(observation_end).normalize()
+    if transactions["order_date"].max().normalize() > observation_end:
+        raise ValueError("Transactions must not occur after observation_end.")
+    rows: list[dict[str, object]] = []
+    eligible = 0
+    for customer_id, events in transactions.groupby("customer_id", sort=False):
+        events = events.sort_values(["order_date", "order_id"]).reset_index(drop=True)
+        retained = events.loc[_retained_mask(events)].reset_index(drop=True)
+        if len(retained) < config.min_successful_orders:
+            continue
+        eligible += 1
+        try:
+            cadence = estimate_cadence(retained["order_date"], config)
+        except ValueError:
+            continue
+        anchor_date = pd.Timestamp(retained.iloc[-1]["order_date"]).normalize()
+        alert_days = max(1, math.ceil(config.alert_fraction * cadence.expected_gap_days))
+        alert_date = anchor_date + pd.Timedelta(days=alert_days)
+        deadline = anchor_date + pd.Timedelta(days=cadence.personalized_window_days)
+        if not alert_date <= observation_end < deadline:
+            continue
+        feature_values = customer_features(
+            events,
+            observation_end,
+            anchor_date,
+            cadence,
+            config.feature_lookback_days,
+        )
+        average_margin = feature_values["margin_180d"] / max(
+            feature_values["successful_orders_180d"], 1.0
+        )
+        estimated_margin = max(0.0, average_margin) * (180.0 / max(cadence.expected_gap_days, 1.0))
+        rows.append(
+            {
+                "customer_id": str(customer_id),
+                "score_date": observation_end,
+                "anchor_order_date": anchor_date,
+                "personalized_deadline": deadline,
+                "estimated_margin_next_180d": estimated_margin,
+                "contact_eligible": True,
+                **feature_values,
+            }
+        )
+    current = pd.DataFrame(rows)
+    if current.empty:
+        raise ValueError("No actionable customers were found at observation_end.")
+    current = current.sort_values(["score_date", "customer_id"]).reset_index(drop=True)
+    coverage = {
+        "total_customers": float(transactions["customer_id"].nunique()),
+        "cadence_eligible_customers": float(eligible),
+        "actionable_customers": float(len(current)),
+        "actionable_customer_share": float(
+            len(current) / max(transactions["customer_id"].nunique(), 1)
+        ),
+    }
+    return current, coverage

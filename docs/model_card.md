@@ -3,50 +3,59 @@
 ## Intended use
 
 The model ranks customers who have entered the alert portion of their own expected purchase
-cycle. It estimates the probability that the next successful purchase will occur after that
-customer's personalized deadline.
+cycle. It estimates the probability that the next retained purchase will occur after that
+customer's personalized deadline. The output supports capacity-limited retention prioritization;
+it is not a causal estimate of whether contact will prevent churn.
 
-The output supports retention prioritization under limited campaign capacity. It is not a
-causal estimate of whether an intervention will prevent churn.
+## Target and eligibility
 
-## Target definition
+1. A retained purchase is neither cancelled nor returned.
+2. At least four retained purchases and three valid gaps are required.
+3. Cadence uses only information available at the snapshot.
+4. A robust dispersion buffer extends the median recent gap for irregular customers.
+5. The target is one when no retained future purchase occurs on or before the deadline.
+6. Deadlines beyond the explicit observation cutoff are excluded.
 
-At each scoring snapshot:
-
-1. Estimate expected cadence from successful purchases available before the snapshot.
-2. Add a robust uncertainty buffer based on recent interpurchase-gap dispersion.
-3. Define the deadline as the last successful purchase date plus that personalized window.
-4. Set the target to one when no successful future purchase occurs on or before the deadline.
-
-Snapshots whose deadlines extend beyond the observation period are removed to avoid treating
-right-censored customers as churned.
+Current operational scoring is separate. It uses one as-of date, includes only customers between
+their alert date and deadline, and exports no target or future-outcome field.
 
 ## Training and evaluation
 
-- Models: logistic regression and histogram gradient boosting
-- Baselines: fixed 90-day recency and a personalized window-progress rule
-- Validation: chronological train, calibration, and test periods
-- Primary metric: PR-AUC
-- Operational metrics: lift and recall at the top 10% and 20%
-- Probability quality: Brier score and calibration curve
+- Candidates: fixed 90-day rule, personalized-window rule, logistic regression, and histogram
+  gradient boosting
+- Model selection: validation PR-AUC
+- Refit: training plus validation periods
+- Probability calibration: independent calibration period
+- Final metrics: untouched chronological test period
+- Uncertainty: 200 customer-cluster bootstrap replicates
+- Probability quality: Brier score, log loss, expected calibration error, slope, and intercept
+- Operational ranking: precision, recall, and lift at the top 10% and 20%
 
-## Data and provenance
+The historical prioritization comparison evaluates ranking against `missed window × expected
+180-day margin`, which requires the held-out future outcome. It does not evaluate a score against
+the score itself. It remains a value proxy, not realized incremental profit.
 
-The checked-in benchmark is synthetic. The generator creates heterogeneous customer cadence,
-order value, promotion affinity, experience failures, and purchase slowdown. It does not place
-a churn label directly on a customer; the target is calculated from the simulated event sequence.
+## Model bundle and monitoring
 
-The pipeline also accepts validated transaction histories under `transaction-history-v1.0`.
-Supplied runs record a content checksum and evaluate a chronologically held-out period; they do
-not reuse the checked-in synthetic performance claim. Derived artifacts retain customer IDs.
+Bundle version `2.0` stores the estimator, calibrator, exact feature order, dataset configuration,
+development observation date, software versions, input fingerprint, and development feature
+reference. Scoring refuses incompatible bundle or feature versions.
+
+`feature_drift.csv` compares current medians and missing rates with the development reference.
+A shift above two robust scale units is marked as a warning. This is a diagnostic only; it is not
+an automatic retraining or deployment decision.
+
+## Data and privacy
+
+The committed benchmark is fully synthetic. Supplied history must satisfy
+`transaction-history-v2.0` and provide a deployment-owned `CHURN_ID_SALT`. Customer-level CSVs
+use HMAC keys and exclude raw identifiers. Source filenames are not copied into provenance.
 
 ## Limitations
 
-- Customers need at least four successful historical orders. A segment-level or survival-model
-  fallback is required for newer customers.
-- A median-and-MAD cadence estimate may react slowly to abrupt life-cycle changes.
-- Repeated seasonality, stock availability, and marketing contacts are simplified.
-- A supplied-history run is population-specific and does not by itself establish transportability.
-- Good ranking performance does not prove that a retention action is incremental or profitable.
-- Before production use, fairness, stability, drift, contact policy, and experiment design must
-  be reviewed with real, governed data.
+- Newer customers need a governed cohort-level fallback.
+- Median/MAD cadence can react slowly to abrupt behavior changes.
+- The simulation simplifies seasonality, availability, marketing contacts, and life events.
+- A supplied-history result is population-specific and does not establish transportability.
+- Feature-drift thresholds and campaign capacity require production policy ownership.
+- Ranking performance does not prove saveability, incremental revenue, or profitability.

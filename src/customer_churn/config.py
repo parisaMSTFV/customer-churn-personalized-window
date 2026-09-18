@@ -23,3 +23,14 @@ class DatasetConfig:
     min_window_days: int = 7
     max_window_days: int = 140
     feature_lookback_days: int = 180
+
+
+@dataclass(frozen=True)
+class InputConfig:
+    """Resource and shape limits for externally supplied transaction files."""
+
+    min_rows: int = 100
+    max_rows: int = 5_000_000
+    max_file_bytes: int = 250 * 1024 * 1024
+    min_customers: int = 10
+    min_history_days: int = 180
